@@ -1,0 +1,6 @@
+#!ipxe
+echo Starting FOG Boot...
+ifstat
+set fog-ip 192.168.1.132
+set fog-webroot fog
+chain --replace http://${fog-ip}/${fog-webroot}/service/ipxe/boot.php?mac=${net0/mac}

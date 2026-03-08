@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>FOG PXE Boot Infrastructure — Visual Flowchart</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; background: #f0f4f8; color: #1a1a2e; }
+
+  .page-header {
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+    color: white; padding: 28px 40px; display: flex; align-items: center; gap: 20px;
+  }
+  .page-header h1 { font-size: 22px; font-weight: 700; }
+  .page-header p  { font-size: 13px; opacity: 0.75; margin-top: 4px; }
+  .badge {
+    background: #e94560; border-radius: 20px; padding: 4px 14px;
+    font-size: 11px; font-weight: 700; letter-spacing: 1px;
+  }
+
+  .main { display: flex; gap: 0; min-height: calc(100vh - 90px); }
+
+  /* ── LEFT: FLOW ── */
+  .flow-col {
+    flex: 1; padding: 32px 28px; display: flex; flex-direction: column; align-items: center;
+    background: #f0f4f8;
+  }
+  .flow-col h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 2px;
+                  color: #64748b; margin-bottom: 20px; }
+
+  .node {
+    width: 400px; border-radius: 10px; padding: 14px 18px; position: relative;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.12); margin-bottom: 0;
+    border-left: 5px solid transparent;
+  }
+  .node-title { font-size: 13px; font-weight: 700; margin-bottom: 4px; }
+  .node-sub   { font-size: 11px; opacity: 0.8; line-height: 1.5; }
+  .node-ip    { font-size: 10px; font-weight: 600; margin-top: 6px;
+                background: rgba(0,0,0,0.07); border-radius: 4px; padding: 2px 7px;
+                display: inline-block; font-family: monospace; }
+
+  .node-vm      { background: #dbeafe; border-color: #2563eb; }
+  .node-router  { background: #fef3c7; border-color: #d97706; }
+  .node-proxy   { background: #ede9fe; border-color: #7c3aed; }
+  .node-tftp    { background: #fee2e2; border-color: #dc2626; }
+  .node-fog     { background: #d1fae5; border-color: #059669; }
+  .node-menu    { background: #e0f2fe; border-color: #0284c7; }
+  .node-step    { background: #f1f5f9; border-color: #64748b; }
+
+  .arrow {
+    width: 2px; background: #94a3b8; margin: 0 auto; position: relative;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .arrow::after {
+    content: '▼'; position: absolute; bottom: -10px; color: #64748b; font-size: 14px;
+  }
+  .arrow-label {
+    position: absolute; left: calc(50% + 10px); white-space: nowrap;
+    font-size: 10px; color: #475569; background: #f0f4f8;
+    padding: 1px 6px; border-radius: 10px; border: 1px solid #cbd5e1;
+    transform: translateY(-50%);
+  }
+  .arrow-tall   { height: 44px; }
+  .arrow-short  { height: 28px; }
+
+  /* Step numbers */
+  .step-num {
+    position: absolute; top: -12px; left: -12px; width: 24px; height: 24px;
+    background: #1e293b; color: white; border-radius: 50%; font-size: 11px;
+    font-weight: 700; display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+  }
+
+  /* Decision diamond */
+  .diamond-wrap { display: flex; align-items: center; justify-content: center; position: relative; margin: 0; }
+  .diamond {
+    width: 0; height: 0;
+    border-left: 55px solid transparent;
+    border-right: 55px solid transparent;
+    border-bottom: 38px solid #7c3aed;
+    position: relative; margin: 0 auto;
+  }
+  .diamond::after {
+    content: ''; position: absolute; top: 38px; left: -55px;
+    width: 0; height: 0;
+    border-left: 55px solid transparent;
+    border-right: 55px solid transparent;
+    border-top: 38px solid #7c3aed;
+  }
+  .diamond-text {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    font-size: 10px; font-weight: 700; color: white; text-align: center;
+    white-space: nowrap; z-index: 1; pointer-events: none;
+  }
+
+  /* ── RIGHT: SETTINGS PANEL ── */
+  .settings-col {
+    width: 440px; background: #1e293b; padding: 28px 24px; overflow-y: auto;
+    border-left: 1px solid #334155;
+  }
+  .settings-col h2 { color: #94a3b8; font-size: 11px; text-transform: uppercase;
+                      letter-spacing: 2px; margin-bottom: 18px; }
+
+  .cfg-card {
+    background: #0f172a; border-radius: 8px; margin-bottom: 16px;
+    border: 1px solid #334155; overflow: hidden;
+  }
+  .cfg-card-header {
+    padding: 10px 14px; display: flex; align-items: center; gap: 10px;
+    border-bottom: 1px solid #334155;
+  }
+  .cfg-card-header h3 { font-size: 12px; font-weight: 700; color: #e2e8f0; }
+  .cfg-card-header .dot {
+    width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+  }
+  .cfg-path { font-size: 10px; color: #64748b; margin-left: auto; font-family: monospace; }
+  pre {
+    padding: 12px 14px; font-family: 'Cascadia Code', 'Consolas', monospace;
+    font-size: 11px; line-height: 1.7; overflow-x: auto; color: #94a3b8;
+    white-space: pre; margin: 0;
+  }
+  .hl-key     { color: #7dd3fc; }
+  .hl-val     { color: #86efac; }
+  .hl-comment { color: #475569; font-style: italic; }
+  .hl-ip      { color: #fbbf24; }
+  .hl-tag     { color: #f472b6; }
+
+  .kv-row { display: flex; padding: 7px 14px; border-bottom: 1px solid #1e293b;
+             align-items: flex-start; gap: 10px; }
+  .kv-row:last-child { border-bottom: none; }
+  .kv-key { font-size: 11px; color: #7dd3fc; font-family: monospace; flex-shrink: 0; min-width: 140px; }
+  .kv-val { font-size: 11px; color: #86efac; font-family: monospace; word-break: break-all; }
+  .kv-desc { font-size: 10px; color: #475569; margin-top: 2px; }
+
+  .tag-pill {
+    display: inline-block; border-radius: 12px; padding: 1px 8px;
+    font-size: 10px; font-weight: 600; margin: 2px 3px 2px 0;
+  }
+  .pill-blue   { background: #1e3a5f; color: #7dd3fc; }
+  .pill-green  { background: #14532d; color: #86efac; }
+  .pill-orange { background: #431407; color: #fbbf24; }
+  .pill-purple { background: #3b0764; color: #e879f9; }
+  .pill-red    { background: #450a0a; color: #fca5a5; }
+
+  .vm-row { display: flex; gap: 12px; margin-bottom: 12px; }
+  .vm-card {
+    flex: 1; background: #0f172a; border: 1px solid #334155; border-radius: 8px;
+    padding: 12px; border-top: 3px solid;
+  }
+  .vm-card.blue  { border-top-color: #2563eb; }
+  .vm-card.amber { border-top-color: #d97706; }
+  .vm-card h4 { font-size: 12px; font-weight: 700; color: #e2e8f0; margin-bottom: 8px; }
+  .vm-detail { font-size: 10px; color: #94a3b8; line-height: 1.8; font-family: monospace; }
+  .vm-detail b { color: #7dd3fc; }
+
+  .infra-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+  .infra-card {
+    background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 12px;
+  }
+  .infra-card h4 { font-size: 11px; font-weight: 700; color: #94a3b8; margin-bottom: 8px;
+                    text-transform: uppercase; letter-spacing: 1px; }
+  .infra-card .val { font-size: 13px; font-weight: 700; color: #e2e8f0; font-family: monospace; }
+  .infra-card .sub { font-size: 10px; color: #475569; margin-top: 2px; }
+
+  /* port table */
+  table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  th { color: #64748b; font-weight: 600; text-align: left; padding: 6px 10px;
+       border-bottom: 1px solid #334155; text-transform: uppercase; font-size: 10px; letter-spacing: 1px; }
+  td { color: #94a3b8; padding: 7px 10px; border-bottom: 1px solid #1e293b; font-family: monospace; }
+  td:first-child { color: #e2e8f0; }
+  tr:last-child td { border-bottom: none; }
+  .proto-udp { color: #fbbf24; } .proto-tcp { color: #86efac; }
+</style>
+</head>
+<body>
+
+<div class="page-header">
+  <div>
+    <h1>FOG PXE Boot Infrastructure</h1>
+    <p>Visual Boot Flow &amp; Configuration Reference &mdash; Generated 2026-03-08</p>
+  </div>
+  <span class="badge">v1.0</span>
+</div>
+
+<div class="main">
+
+  <!-- ════════════════════════════════════════════
+       LEFT — FLOW DIAGRAM
+       ════════════════════════════════════════════ -->
+  <div class="flow-col">
+    <h2>PXE Boot Sequence</h2>
+
+    <!-- STEP 1 -->
+    <div class="node node-vm" style="position:relative;">
+      <div class="step-num">1</div>
+      <div class="node-title">VirtualBox VM Powers On</div>
+      <div class="node-sub">
+        Boot order: <strong>Network first</strong> (linux) / DVD→Disk (win10)<br>
+        NIC sends PXE-enabled DHCP Discover broadcast
+      </div>
+      <div>
+        <span class="node-ip">linux — 82545EM — Bridged eno1</span>
+        <span class="node-ip">win10 — Am79C973 — Bridged eno1</span>
+      </div>
+    </div>
+
+    <div class="arrow arrow-tall" style="width:2px;height:44px;">
+      <span class="arrow-label" style="top:50%">Broadcast UDP:68 → 255.255.255.255</span>
+    </div>
+
+    <!-- STEP 2 -->
+    <div class="node node-router" style="position:relative;">
+      <div class="step-num">2</div>
+      <div class="node-title">OpenWrt Router — DHCP Offer</div>
+      <div class="node-sub">
+        Assigns IP from pool · Sends PXE boot options<br>
+        <strong>next-server = 192.168.1.132</strong> · <strong>filename = undionly.kpxe</strong>
+      </div>
+      <div>
+        <span class="node-ip">192.168.1.1 — LAN DHCP</span>
+        <span class="node-ip">Range: .100–.250</span>
+      </div>
+    </div>
+
+    <div class="arrow arrow-tall" style="width:2px;height:44px;">
+      <span class="arrow-label" style="top:50%">DHCP ACK + boot options</span>
+    </div>
+
+    <!-- STEP 3 -->
+    <div class="node node-tftp" style="position:relative;">
+      <div class="step-num">3</div>
+      <div class="node-title">TFTP Download — undionly.kpxe</div>
+      <div class="node-sub">
+        VM contacts TFTP server at 192.168.1.132:69<br>
+        Downloads <code>undionly.kpxe</code> (~363 KB) — iPXE chainloader
+      </div>
+      <div>
+        <span class="node-ip">tftpd-hpa — 192.168.1.132:69 UDP</span>
+        <span class="node-ip">/tftpboot/undionly.kpxe</span>
+      </div>
+    </div>
+
+    <div class="arrow arrow-tall" style="width:2px;height:44px;">
+      <span class="arrow-label" style="top:50%">TFTP RRQ — undionly.kpxe</span>
+    </div>
+
+    <!-- STEP 4 -->
+    <div class="node node-proxy" style="position:relative;">
+      <div class="step-num">4</div>
+      <div class="node-title">iPXE Boots — Second DHCP (Proxy)</div>
+      <div class="node-sub">
+        undionly.kpxe sends new DHCP with <strong>user-class: iPXE</strong><br>
+        dnsmasq on FOG server detects tag &amp; responds on port <strong>4011</strong>
+      </div>
+      <div>
+        <span class="node-ip">dnsmasq Proxy — 192.168.1.132:4011 UDP</span>
+        <span class="node-ip">tag:ipxe → boot.php</span>
+      </div>
+    </div>
+
+    <div class="arrow arrow-tall" style="width:2px;height:44px;">
+      <span class="arrow-label" style="top:50%">dhcp-boot: http://192.168.1.132/fog/service/ipxe/boot.php</span>
+    </div>
+
+    <!-- STEP 5 -->
+    <div class="node node-fog" style="position:relative;">
+      <div class="step-num">5</div>
+      <div class="node-title">Apache2 / FOG Web Server</div>
+      <div class="node-sub">
+        HTTP GET /fog/service/ipxe/boot.php?mac=XX:XX:XX:XX:XX:XX<br>
+        FOG looks up MAC in database · Returns iPXE menu script
+      </div>
+      <div>
+        <span class="node-ip">192.168.1.132:80 — Apache2</span>
+        <span class="node-ip">FOG Project DB (MySQL)</span>
+      </div>
+    </div>
+
+    <div class="arrow arrow-tall" style="width:2px;height:44px;">
+      <span class="arrow-label" style="top:50%">HTTP 200 — iPXE menu script</span>
+    </div>
+
+    <!-- STEP 6 — MENU -->
+    <div class="node node-menu" style="position:relative;">
+      <div class="step-num">6</div>
+      <div class="node-title">FOG Boot Menu Displayed</div>
+      <div class="node-sub">
+        VM shows interactive iPXE menu with options:
+      </div>
+      <div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px;">
+        <span class="tag-pill pill-green">Boot from local disk</span>
+        <span class="tag-pill pill-blue">Deploy Image</span>
+        <span class="tag-pill pill-orange">Capture Image</span>
+        <span class="tag-pill pill-purple">Run Memtest86+</span>
+        <span class="tag-pill pill-red">Full Registration</span>
+      </div>
+    </div>
+
+    <div class="arrow arrow-tall" style="width:2px;height:44px;">
+      <span class="arrow-label" style="top:50%">User selects action</span>
+    </div>
+
+    <!-- STEP 7 — OUTCOME -->
+    <div class="node node-step" style="position:relative;">
+      <div class="step-num">7</div>
+      <div class="node-title">Action Executed</div>
+      <div class="node-sub">
+        <strong>Capture:</strong> FOG agent boots, streams disk image to FOG server<br>
+        <strong>Deploy:</strong> FOG streams image back to VM via multicast/unicast<br>
+        <strong>Memtest:</strong> TFTP fetches memtest.bin, runs in RAM<br>
+        <strong>Local disk:</strong> Chainloads to existing OS bootloader
+      </div>
+    </div>
+
+    <!-- Legend -->
+    <div style="margin-top:32px;width:400px;">
+      <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:2px;margin-bottom:10px;">Legend</div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;">
+        <span style="display:flex;align-items:center;gap:5px;font-size:11px;">
+          <span style="width:14px;height:14px;background:#dbeafe;border:2px solid #2563eb;border-radius:3px;display:inline-block;"></span>VirtualBox VM
+        </span>
+        <span style="display:flex;align-items:center;gap:5px;font-size:11px;">
+          <span style="width:14px;height:14px;background:#fef3c7;border:2px solid #d97706;border-radius:3px;display:inline-block;"></span>Router/DHCP
+        </span>
+        <span style="display:flex;align-items:center;gap:5px;font-size:11px;">
+          <span style="width:14px;height:14px;background:#fee2e2;border:2px solid #dc2626;border-radius:3px;display:inline-block;"></span>TFTP
+        </span>
+        <span style="display:flex;align-items:center;gap:5px;font-size:11px;">
+          <span style="width:14px;height:14px;background:#ede9fe;border:2px solid #7c3aed;border-radius:3px;display:inline-block;"></span>Proxy DHCP
+        </span>
+        <span style="display:flex;align-items:center;gap:5px;font-size:11px;">
+          <span style="width:14px;height:14px;background:#d1fae5;border:2px solid #059669;border-radius:3px;display:inline-block;"></span>FOG/Apache
+        </span>
+        <span style="display:flex;align-items:center;gap:5px;font-size:11px;">
+          <span style="width:14px;height:14px;background:#e0f2fe;border:2px solid #0284c7;border-radius:3px;display:inline-block;"></span>FOG Menu
+        </span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════════════
+       RIGHT — SETTINGS PANEL
+       ════════════════════════════════════════════ -->
+  <div class="settings-col">
+    <h2>Configuration Settings</h2>
+
+    <!-- Infrastructure Cards -->
+    <div class="infra-grid">
+      <div class="infra-card">
+        <h4>FOG Server</h4>
+        <div class="val">192.168.1.132</div>
+        <div class="sub">HP EliteDesk 800 G3 DM</div>
+        <div class="sub" style="margin-top:6px;color:#7dd3fc;">eno1 — bridged</div>
+      </div>
+      <div class="infra-card">
+        <h4>Router</h4>
+        <div class="val">192.168.1.1</div>
+        <div class="sub">OpenWrt (LuCI)</div>
+        <div class="sub" style="margin-top:6px;color:#fbbf24;">DHCP: .100–.250</div>
+      </div>
+      <div class="infra-card">
+        <h4>TFTP Root</h4>
+        <div class="val">/tftpboot/</div>
+        <div class="sub">tftpd-hpa · UDP:69</div>
+      </div>
+      <div class="infra-card">
+        <h4>FOG Web Root</h4>
+        <div class="val">/fog/</div>
+        <div class="sub">Apache2 · TCP:80</div>
+      </div>
+    </div>
+
+    <!-- dnsmasq config -->
+    <div class="cfg-card">
+      <div class="cfg-card-header">
+        <span class="dot" style="background:#7c3aed;"></span>
+        <h3>dnsmasq — Proxy DHCP</h3>
+        <span class="cfg-path">/etc/dnsmasq.d/fog-proxydhcp.conf</span>
+      </div>
+      <pre><span class="hl-comment"># Proxy-only — no IP assignment</span>
+<span class="hl-key">log-dhcp</span>
+<span class="hl-key">dhcp-range</span>=<span class="hl-ip">192.168.1.0</span>,<span class="hl-val">proxy</span>
+
+<span class="hl-comment"># Tag second-stage iPXE clients</span>
+<span class="hl-key">dhcp-userclass</span>=<span class="hl-tag">set:ipxe</span>,<span class="hl-val">iPXE</span>
+
+<span class="hl-comment"># Tell pre-iPXE clients what to chainload</span>
+<span class="hl-key">pxe-service</span>=<span class="hl-tag">tag:!ipxe</span>,x86PC,<span class="hl-val">"Boot from FOG"</span>,<span class="hl-val">undionly.kpxe</span>,<span class="hl-ip">192.168.1.132</span>
+<span class="hl-key">pxe-service</span>=<span class="hl-tag">tag:!ipxe</span>,X86-64_EFI,<span class="hl-val">"Boot from FOG"</span>,<span class="hl-val">ipxe.efi</span>,<span class="hl-ip">192.168.1.132</span>
+
+<span class="hl-comment"># Listen on LAN NIC only</span>
+<span class="hl-key">interface</span>=<span class="hl-val">eno1</span>
+<span class="hl-key">except-interface</span>=<span class="hl-val">lo</span>
+<span class="hl-key">except-interface</span>=<span class="hl-val">docker0</span>
+
+<span class="hl-comment"># Send FOG URL to full iPXE, fallback to TFTP</span>
+<span class="hl-key">dhcp-boot</span>=<span class="hl-tag">tag:ipxe</span>,<span class="hl-val">http://</span><span class="hl-ip">192.168.1.132</span><span class="hl-val">/fog/service/ipxe/boot.php</span>
+<span class="hl-key">dhcp-boot</span>=<span class="hl-tag">tag:!ipxe</span>,<span class="hl-val">undionly.kpxe</span>,,<span class="hl-ip">192.168.1.132</span></pre>
+    </div>
+
+    <!-- Router DHCP Boot config -->
+    <div class="cfg-card">
+      <div class="cfg-card-header">
+        <span class="dot" style="background:#d97706;"></span>
+        <h3>OpenWrt Router — DHCP Boot</h3>
+        <span class="cfg-path">/etc/config/dhcp (router)</span>
+      </div>
+      <pre><span class="hl-comment"># UCI section cfg06b399</span>
+<span class="hl-key">config</span> <span class="hl-val">boot</span>
+    <span class="hl-key">option filename</span>      <span class="hl-val">'undionly.kpxe'</span>
+    <span class="hl-key">option serveraddress</span> <span class="hl-ip">'192.168.1.132'</span>
+    <span class="hl-key">option servername</span>    <span class="hl-val">'fogserver'</span>
+<span class="hl-comment">
+# Applies to ALL clients (no networkid filter)
+# Sends DHCP options 66+67 with FOG TFTP details</span></pre>
+    </div>
+
+    <!-- fog.ipxe -->
+    <div class="cfg-card">
+      <div class="cfg-card-header">
+        <span class="dot" style="background:#059669;"></span>
+        <h3>iPXE Boot Script</h3>
+        <span class="cfg-path">/tftpboot/fog.ipxe</span>
+      </div>
+      <pre><span class="hl-val">#!ipxe</span>
+<span class="hl-key">echo</span> Starting FOG Boot...
+<span class="hl-key">ifstat</span>
+<span class="hl-key">set</span> fog-ip       <span class="hl-ip">192.168.1.132</span>
+<span class="hl-key">set</span> fog-webroot  <span class="hl-val">fog</span>
+<span class="hl-key">chain</span> --replace http://<span class="hl-ip">${fog-ip}</span>/<span class="hl-ip">${fog-webroot}</span><span class="hl-val">/service/ipxe/boot.php</span>?mac=<span class="hl-ip">${net0/mac}</span></pre>
+    </div>
+
+    <!-- default.ipxe -->
+    <div class="cfg-card">
+      <div class="cfg-card-header">
+        <span class="dot" style="background:#0284c7;"></span>
+        <h3>Fallback Chainloader</h3>
+        <span class="cfg-path">/tftpboot/default.ipxe</span>
+      </div>
+      <pre><span class="hl-val">#!ipxe</span>
+<span class="hl-key">chain</span> tftp://<span class="hl-ip">192.168.1.132</span>/fog.ipxe</pre>
+    </div>
+
+    <!-- TFTP Files -->
+    <div class="cfg-card">
+      <div class="cfg-card-header">
+        <span class="dot" style="background:#dc2626;"></span>
+        <h3>TFTP Files</h3>
+        <span class="cfg-path">/tftpboot/</span>
+      </div>
+      <table>
+        <tr><th>File</th><th>Size</th><th>Purpose</th></tr>
+        <tr><td>undionly.kpxe</td><td>363 KB</td><td>BIOS iPXE chainloader</td></tr>
+        <tr><td>ipxe.efi</td><td>1.07 MB</td><td>UEFI iPXE chainloader</td></tr>
+        <tr><td>fog.ipxe</td><td>—</td><td>FOG boot script</td></tr>
+        <tr><td>default.ipxe</td><td>—</td><td>TFTP fallback</td></tr>
+      </table>
+    </div>
+
+    <!-- VMs -->
+    <div style="margin-bottom:16px;">
+      <div style="color:#94a3b8;font-size:11px;text-transform:uppercase;letter-spacing:2px;margin-bottom:10px;">VirtualBox VMs</div>
+      <div class="vm-row">
+        <div class="vm-card blue">
+          <h4>linux</h4>
+          <div class="vm-detail">
+            <b>NIC:</b> Intel 82545EM<br>
+            <b>Mode:</b> Bridged (eno1)<br>
+            <b>Boot:</b> Net → DVD → Disk<br>
+            <b>RAM:</b> 4096 MB · 1 CPU<br>
+            <b>OS:</b> Linux 64-bit<br>
+            <b>Use:</b> PXE test / imaging
+          </div>
+        </div>
+        <div class="vm-card amber">
+          <h4>win10</h4>
+          <div class="vm-detail">
+            <b>NIC:</b> AMD Am79C973<br>
+            <b>Mode:</b> Bridged (eno1)<br>
+            <b>Boot:</b> DVD → Disk<br>
+            <b>RAM:</b> 2048 MB · 1 CPU<br>
+            <b>OS:</b> Windows 10 64-bit<br>
+            <b>Use:</b> Image capture target
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Ports -->
+    <div class="cfg-card">
+      <div class="cfg-card-header">
+        <span class="dot" style="background:#64748b;"></span>
+        <h3>Service Ports — FOG Server</h3>
+      </div>
+      <table>
+        <tr><th>Service</th><th>Port</th><th>Proto</th><th>Purpose</th></tr>
+        <tr><td>Apache2</td><td>80</td><td class="proto-tcp">TCP</td><td>FOG web + iPXE</td></tr>
+        <tr><td>tftpd-hpa</td><td>69</td><td class="proto-udp">UDP</td><td>Boot files</td></tr>
+        <tr><td>dnsmasq</td><td>4011</td><td class="proto-udp">UDP</td><td>Proxy DHCP</td></tr>
+        <tr><td>MySQL</td><td>3306</td><td class="proto-tcp">TCP</td><td>FOG database</td></tr>
+      </table>
+    </div>
+
+    <!-- Troubleshooting -->
+    <div class="cfg-card">
+      <div class="cfg-card-header">
+        <span class="dot" style="background:#f59e0b;"></span>
+        <h3>Known Issues &amp; Fixes</h3>
+      </div>
+      <div class="kv-row">
+        <div>
+          <div class="kv-key">"Nothing to boot"</div>
+          <div class="kv-val">next-server pointing to wrong host</div>
+          <div class="kv-desc">Ensure router sends next-server=192.168.1.132</div>
+        </div>
+      </div>
+      <div class="kv-row">
+        <div>
+          <div class="kv-key">dnsmasq silent</div>
+          <div class="kv-val">dhcp-authoritative in proxy config</div>
+          <div class="kv-desc">Remove dhcp-range IPs, dhcp-option, dhcp-authoritative</div>
+        </div>
+      </div>
+      <div class="kv-row">
+        <div>
+          <div class="kv-key">TFTP uppercase fail</div>
+          <div class="kv-val">ISO9660 without Joliet/RockRidge</div>
+          <div class="kv-desc">Use genisoimage -J -R flags</div>
+        </div>
+      </div>
+      <div class="kv-row">
+        <div>
+          <div class="kv-key">networkid=bios filter</div>
+          <div class="kv-val">VirtualBox doesn't send client-arch</div>
+          <div class="kv-desc">Remove networkid from boot UCI section</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top:8px;color:#334155;font-size:10px;text-align:center;padding:12px;">
+      FOG PXE Infrastructure · GLS Tech · 2026-03-08<br>
+      github.com/Treefella/fog-pxe-infrastructure
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

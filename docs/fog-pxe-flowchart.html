@@ -214,10 +214,10 @@
       <div class="node-title">OpenWrt Router — DHCP Offer</div>
       <div class="node-sub">
         Assigns IP from pool · Sends PXE boot options<br>
-        <strong>next-server = 192.168.1.132</strong> · <strong>filename = undionly.kpxe</strong>
+        <strong>next-server = 10.0.0.10</strong> · <strong>filename = undionly.kpxe</strong>
       </div>
       <div>
-        <span class="node-ip">192.168.1.1 — LAN DHCP</span>
+        <span class="node-ip">10.0.0.1 — LAN DHCP</span>
         <span class="node-ip">Range: .100–.250</span>
       </div>
     </div>
@@ -231,11 +231,11 @@
       <div class="step-num">3</div>
       <div class="node-title">TFTP Download — undionly.kpxe</div>
       <div class="node-sub">
-        VM contacts TFTP server at 192.168.1.132:69<br>
+        VM contacts TFTP server at 10.0.0.10:69<br>
         Downloads <code>undionly.kpxe</code> (~363 KB) — iPXE chainloader
       </div>
       <div>
-        <span class="node-ip">tftpd-hpa — 192.168.1.132:69 UDP</span>
+        <span class="node-ip">tftpd-hpa — 10.0.0.10:69 UDP</span>
         <span class="node-ip">/tftpboot/undionly.kpxe</span>
       </div>
     </div>
@@ -253,13 +253,13 @@
         dnsmasq on FOG server detects tag &amp; responds on port <strong>4011</strong>
       </div>
       <div>
-        <span class="node-ip">dnsmasq Proxy — 192.168.1.132:4011 UDP</span>
+        <span class="node-ip">dnsmasq Proxy — 10.0.0.10:4011 UDP</span>
         <span class="node-ip">tag:ipxe → boot.php</span>
       </div>
     </div>
 
     <div class="arrow arrow-tall" style="width:2px;height:44px;">
-      <span class="arrow-label" style="top:50%">dhcp-boot: http://192.168.1.132/fog/service/ipxe/boot.php</span>
+      <span class="arrow-label" style="top:50%">dhcp-boot: http://10.0.0.10/fog/service/ipxe/boot.php</span>
     </div>
 
     <!-- STEP 5 -->
@@ -271,7 +271,7 @@
         FOG looks up MAC in database · Returns iPXE menu script
       </div>
       <div>
-        <span class="node-ip">192.168.1.132:80 — Apache2</span>
+        <span class="node-ip">10.0.0.10:80 — Apache2</span>
         <span class="node-ip">FOG Project DB (MySQL)</span>
       </div>
     </div>
@@ -348,13 +348,13 @@
     <div class="infra-grid">
       <div class="infra-card">
         <h4>FOG Server</h4>
-        <div class="val">192.168.1.132</div>
-        <div class="sub">HP EliteDesk 800 G3 DM</div>
+        <div class="val">10.0.0.10</div>
+        <div class="sub">FOG Server</div>
         <div class="sub" style="margin-top:6px;color:#7dd3fc;">eno1 — bridged</div>
       </div>
       <div class="infra-card">
         <h4>Router</h4>
-        <div class="val">192.168.1.1</div>
+        <div class="val">10.0.0.1</div>
         <div class="sub">OpenWrt (LuCI)</div>
         <div class="sub" style="margin-top:6px;color:#fbbf24;">DHCP: .100–.250</div>
       </div>
@@ -379,14 +379,14 @@
       </div>
       <pre><span class="hl-comment"># Proxy-only — no IP assignment</span>
 <span class="hl-key">log-dhcp</span>
-<span class="hl-key">dhcp-range</span>=<span class="hl-ip">192.168.1.0</span>,<span class="hl-val">proxy</span>
+<span class="hl-key">dhcp-range</span>=<span class="hl-ip">10.0.0.0</span>,<span class="hl-val">proxy</span>
 
 <span class="hl-comment"># Tag second-stage iPXE clients</span>
 <span class="hl-key">dhcp-userclass</span>=<span class="hl-tag">set:ipxe</span>,<span class="hl-val">iPXE</span>
 
 <span class="hl-comment"># Tell pre-iPXE clients what to chainload</span>
-<span class="hl-key">pxe-service</span>=<span class="hl-tag">tag:!ipxe</span>,x86PC,<span class="hl-val">"Boot from FOG"</span>,<span class="hl-val">undionly.kpxe</span>,<span class="hl-ip">192.168.1.132</span>
-<span class="hl-key">pxe-service</span>=<span class="hl-tag">tag:!ipxe</span>,X86-64_EFI,<span class="hl-val">"Boot from FOG"</span>,<span class="hl-val">ipxe.efi</span>,<span class="hl-ip">192.168.1.132</span>
+<span class="hl-key">pxe-service</span>=<span class="hl-tag">tag:!ipxe</span>,x86PC,<span class="hl-val">"Boot from FOG"</span>,<span class="hl-val">undionly.kpxe</span>,<span class="hl-ip">10.0.0.10</span>
+<span class="hl-key">pxe-service</span>=<span class="hl-tag">tag:!ipxe</span>,X86-64_EFI,<span class="hl-val">"Boot from FOG"</span>,<span class="hl-val">ipxe.efi</span>,<span class="hl-ip">10.0.0.10</span>
 
 <span class="hl-comment"># Listen on LAN NIC only</span>
 <span class="hl-key">interface</span>=<span class="hl-val">eno1</span>
@@ -394,8 +394,8 @@
 <span class="hl-key">except-interface</span>=<span class="hl-val">docker0</span>
 
 <span class="hl-comment"># Send FOG URL to full iPXE, fallback to TFTP</span>
-<span class="hl-key">dhcp-boot</span>=<span class="hl-tag">tag:ipxe</span>,<span class="hl-val">http://</span><span class="hl-ip">192.168.1.132</span><span class="hl-val">/fog/service/ipxe/boot.php</span>
-<span class="hl-key">dhcp-boot</span>=<span class="hl-tag">tag:!ipxe</span>,<span class="hl-val">undionly.kpxe</span>,,<span class="hl-ip">192.168.1.132</span></pre>
+<span class="hl-key">dhcp-boot</span>=<span class="hl-tag">tag:ipxe</span>,<span class="hl-val">http://</span><span class="hl-ip">10.0.0.10</span><span class="hl-val">/fog/service/ipxe/boot.php</span>
+<span class="hl-key">dhcp-boot</span>=<span class="hl-tag">tag:!ipxe</span>,<span class="hl-val">undionly.kpxe</span>,,<span class="hl-ip">10.0.0.10</span></pre>
     </div>
 
     <!-- Router DHCP Boot config -->
@@ -408,7 +408,7 @@
       <pre><span class="hl-comment"># UCI section cfg06b399</span>
 <span class="hl-key">config</span> <span class="hl-val">boot</span>
     <span class="hl-key">option filename</span>      <span class="hl-val">'undionly.kpxe'</span>
-    <span class="hl-key">option serveraddress</span> <span class="hl-ip">'192.168.1.132'</span>
+    <span class="hl-key">option serveraddress</span> <span class="hl-ip">'10.0.0.10'</span>
     <span class="hl-key">option servername</span>    <span class="hl-val">'fogserver'</span>
 <span class="hl-comment">
 # Applies to ALL clients (no networkid filter)
@@ -425,7 +425,7 @@
       <pre><span class="hl-val">#!ipxe</span>
 <span class="hl-key">echo</span> Starting FOG Boot...
 <span class="hl-key">ifstat</span>
-<span class="hl-key">set</span> fog-ip       <span class="hl-ip">192.168.1.132</span>
+<span class="hl-key">set</span> fog-ip       <span class="hl-ip">10.0.0.10</span>
 <span class="hl-key">set</span> fog-webroot  <span class="hl-val">fog</span>
 <span class="hl-key">chain</span> --replace http://<span class="hl-ip">${fog-ip}</span>/<span class="hl-ip">${fog-webroot}</span><span class="hl-val">/service/ipxe/boot.php</span>?mac=<span class="hl-ip">${net0/mac}</span></pre>
     </div>
@@ -438,7 +438,7 @@
         <span class="cfg-path">/tftpboot/default.ipxe</span>
       </div>
       <pre><span class="hl-val">#!ipxe</span>
-<span class="hl-key">chain</span> tftp://<span class="hl-ip">192.168.1.132</span>/fog.ipxe</pre>
+<span class="hl-key">chain</span> tftp://<span class="hl-ip">10.0.0.10</span>/fog.ipxe</pre>
     </div>
 
     <!-- TFTP Files -->
@@ -511,7 +511,7 @@
         <div>
           <div class="kv-key">"Nothing to boot"</div>
           <div class="kv-val">next-server pointing to wrong host</div>
-          <div class="kv-desc">Ensure router sends next-server=192.168.1.132</div>
+          <div class="kv-desc">Ensure router sends next-server=10.0.0.10</div>
         </div>
       </div>
       <div class="kv-row">

@@ -1,237 +1,188 @@
-# FOG PXE Boot Infrastructure — Configuration Backup & Documentation
+# FOG PXE Boot Infrastructure
 
-**Date:** 2026-03-08
-**FOG Server:** gls-HP-EliteDesk-800-G3-DM-65W
-**FOG Server IP:** 192.168.1.132 (static)
-**Router (OpenWrt):** 192.168.1.1
+Configuration files and scripts for a [FOG Project](https://fogproject.org) PXE boot environment using:
+
+- **FOG Server** — imaging server with Apache, TFTP (tftpd-hpa), and dnsmasq Proxy DHCP
+- **OpenWrt Router** — handles main DHCP; FOG runs in Proxy DHCP mode alongside it
+- **iPXE** — chainloaded via TFTP for both BIOS and UEFI clients
+
+Built and documented by [GLS Tech Limited](https://glstech.co.uk) — IT support & open source consultancy in County Durham.
 
 ---
 
-## Network Diagram
+## Network Overview
 
 ```
-                        ┌─────────────────────────────────────────────────────────┐
-                        │                    LAN: 192.168.1.0/24                  │
-                        └─────────────────────────────────────────────────────────┘
-                                                    │
-               ┌────────────────────────────────────┼────────────────────────────────────┐
-               │                                    │                                    │
-               ▼                                    ▼                                    ▼
-  ┌────────────────────────┐          ┌─────────────────────────┐          ┌─────────────────────────┐
-  │   OpenWrt Router       │          │   FOG Server            │          │   VirtualBox Host       │
-  │   192.168.1.1          │          │   192.168.1.132         │          │   (gls-HP-EliteDesk)    │
-  │                        │          │   HP EliteDesk 800 G3   │          │   192.168.1.x           │
-  │  Services:             │          │                         │          │                         │
-  │  • DHCP (main)         │          │  Services:              │          │  VMs (Bridged → eno1):  │
-  │    Range: .100–.250    │          │  • FOG Project          │          │  ┌─────────────────┐   │
-  │  • DNS                 │          │  • Apache HTTP          │          │  │ linux VM        │   │
-  │  • Gateway             │          │    port 80              │          │  │ NIC: 82545EM    │   │
-  │                        │          │  • TFTP (tftpd-hpa)     │          │  │ Boot: net first │   │
-  │  PXE Boot Config:      │          │    port 69              │          │  └─────────────────┘   │
-  │  • next-server=        │          │  • dnsmasq Proxy DHCP   │          │  ┌─────────────────┐   │
-  │    192.168.1.132       │◄────────►│    port 4011            │          │  │ win10 VM        │   │
-  │  • filename=           │  DHCP    │                         │          │  │ NIC: Am79C973   │   │
-  │    undionly.kpxe       │  Proxy   │  IP: 192.168.1.132/24   │          │  │ Boot: dvd/disk  │   │
-  └────────────────────────┘          └─────────────────────────┘          └─────────────────────────┘
-
+                        ┌──────────────────────────────┐
+                        │     LAN: 10.0.0.0/24     │
+                        └──────────────────────────────┘
+                                        │
+               ┌────────────────────────┼────────────────────────┐
+               │                        │                        │
+               ▼                        ▼                        ▼
+  ┌─────────────────────┐   ┌─────────────────────┐   ┌─────────────────────┐
+  │   OpenWrt Router    │   │   FOG Server        │   │   Client Machines   │
+  │   10.0.0.1    │   │   10.0.0.10       │   │   (PXE boot)        │
+  │                     │   │                     │   │                     │
+  │  • DHCP (main)      │   │  • FOG Project      │   │  BIOS: undionly.kpxe│
+  │  • DNS              │◄─►│  • Apache HTTP :80  │   │  UEFI: ipxe.efi     │
+  │  • Gateway          │   │  • TFTP :69         │   │                     │
+  │                     │   │  • dnsmasq Proxy    │   │                     │
+  └─────────────────────┘   │    DHCP :4011       │   └─────────────────────┘
+                             └─────────────────────┘
 ```
+
+**Key design:** The router handles all DHCP leases. FOG's dnsmasq runs in **Proxy DHCP** mode only — it responds on port 4011 to add PXE boot options without conflicting with the router.
 
 ---
 
 ## PXE Boot Flow
 
 ```
-VM Powers On (network boot)
+Client powers on (network boot)
         │
         ▼
-1. DHCP Discover (broadcast)
-        │
-        ├──► OpenWrt Router (192.168.1.1)
-        │    Responds with DHCP Offer:
-        │    • IP lease (192.168.1.x)
-        │    • next-server = 192.168.1.132
-        │    • filename = undionly.kpxe
-        │
-        ├──► FOG dnsmasq Proxy DHCP (192.168.1.132:4011)
-        │    Also responds with PXE boot options
+1. DHCP Discover
+        ├─► Router: assigns IP, sends next-server + filename (undionly.kpxe)
+        └─► FOG dnsmasq Proxy DHCP: adds PXE service tags
         │
         ▼
-2. TFTP Request → 192.168.1.132:69
-   Downloads: undionly.kpxe (iPXE chainloader)
+2. TFTP: downloads undionly.kpxe from FOG server
         │
         ▼
-3. iPXE Boots (undionly.kpxe)
-   Sends new DHCP Discover with "iPXE" user-class
+3. iPXE boots — sends new DHCP Discover with "iPXE" user-class
         │
         ▼
-4. FOG dnsmasq detects iPXE tag
-   Responds with:
-   dhcp-boot = http://192.168.1.132/fog/service/ipxe/boot.php
+4. FOG dnsmasq detects iPXE tag → responds with HTTP boot URL
         │
         ▼
-5. HTTP Request → FOG Apache
-   GET http://192.168.1.132/fog/service/ipxe/boot.php?mac=XX:XX:XX:XX:XX:XX
+5. HTTP GET → FOG Apache → boot.php?mac=XX:XX:XX:XX:XX:XX
         │
         ▼
-6. FOG Menu Displayed
-   • Deploy image
-   • Capture image
-   • Boot from local disk
-   • Memory test
-   • etc.
+6. FOG menu: Deploy / Capture / Boot local / etc.
 ```
 
 ---
 
-## Configuration Files
-
-### 1. FOG Server — dnsmasq Proxy DHCP
-**File:** `/etc/dnsmasq.d/fog-proxydhcp.conf`
+## Repository Structure
 
 ```
-log-dhcp
-dhcp-range=192.168.1.0,proxy
-dhcp-userclass=set:ipxe,iPXE
-pxe-service=tag:!ipxe,x86PC,"Boot from FOG",undionly.kpxe,192.168.1.132
-pxe-service=tag:!ipxe,X86-64_EFI,"Boot from FOG",ipxe.efi,192.168.1.132
-interface=eno1
-except-interface=lo
-except-interface=docker0
-dhcp-boot=tag:ipxe,http://192.168.1.132/fog/service/ipxe/boot.php
-dhcp-boot=tag:!ipxe,undionly.kpxe,,192.168.1.132
+fog-pxe-infrastructure/
+├── configs/
+│   └── fog-proxydhcp.conf     # dnsmasq Proxy DHCP config (FOG server)
+├── tftpboot/
+│   ├── default.ipxe           # TFTP chainloader → fog.ipxe
+│   ├── fog.ipxe               # iPXE script → FOG boot.php
+│   ├── undionly.kpxe          # iPXE binary (BIOS/legacy)
+│   └── ipxe.efi               # iPXE binary (UEFI)
+└── docs/
+    ├── README.md              # this file
+    └── restart_router_dnsmasq.py  # helper: restart dnsmasq on OpenWrt via ubus RPC
 ```
 
-**Key notes:**
-- `dhcp-range=192.168.1.0,proxy` — Proxy DHCP mode only (does NOT assign IPs, that's the router's job)
-- `dhcp-userclass=set:ipxe,iPXE` — Tags second-stage iPXE clients
-- `pxe-service` — Tells pre-iPXE clients which file to chainload
-- `dhcp-boot=tag:ipxe,...` — Sends HTTP boot URL to full iPXE clients
-- Do NOT add `dhcp-authoritative`, `dhcp-range` with IPs, or `dhcp-option` — these conflict with the router
+---
 
-### 2. FOG Server — iPXE Boot Script
-**File:** `/tftpboot/fog.ipxe`
+## Setup
 
-```ipxe
-#!ipxe
-echo Starting FOG Boot...
-ifstat
-set fog-ip 192.168.1.132
-set fog-webroot fog
-chain --replace http://${fog-ip}/${fog-webroot}/service/ipxe/boot.php?mac=${net0/mac}
-```
+### 1. Replace placeholders
 
-### 3. FOG Server — Default iPXE Chainloader
-**File:** `/tftpboot/default.ipxe`
+Search and replace throughout the configs before deploying:
 
-```ipxe
-#!ipxe
-chain tftp://192.168.1.132/fog.ipxe
-```
+| Example value         | Replace with                          |
+|-----------------------|---------------------------------------|
+| `10.0.0.10`           | Static IP of your FOG server          |
+| `10.0.0.1`            | IP of your router/gateway             |
+| `10.0.0`              | Your LAN subnet prefix                |
+| `YOUR_LAN_INTERFACE`  | FOG server's LAN NIC (e.g. `eno1`)    |
 
-### 4. OpenWrt Router — DHCP Boot Config
-**File:** `/etc/config/dhcp` (on router 192.168.1.1)
+### 2. Deploy dnsmasq Proxy DHCP config
 
-Managed via UCI. The relevant boot section (cfg06b399):
-```
-config boot
-    option filename 'undionly.kpxe'
-    option serveraddress '192.168.1.132'
-    option servername 'fogserver'
-```
-
-**How to view/edit on router:**
 ```bash
-# Via UCI (SSH to router or use LuCI web UI at http://192.168.1.1)
-uci show dhcp
-uci get dhcp.cfg06b399
+sudo cp configs/fog-proxydhcp.conf /etc/dnsmasq.d/
+sudo systemctl restart dnsmasq
+```
+
+> **Important:** Do not add `dhcp-authoritative`, full `dhcp-range` with IPs, or `dhcp-option` to this config — those conflict with the router's DHCP server. Proxy mode only.
+
+### 3. Deploy TFTP files
+
+```bash
+sudo cp tftpboot/fog.ipxe /tftpboot/
+sudo cp tftpboot/default.ipxe /tftpboot/
+sudo cp tftpboot/undionly.kpxe /tftpboot/
+sudo cp tftpboot/ipxe.efi /tftpboot/
+sudo systemctl restart tftpd-hpa
+```
+
+### 4. Router DHCP boot options (OpenWrt)
+
+Via UCI on the router:
+```bash
+uci set dhcp.@dnsmasq[0].dhcp_boot='undionly.kpxe,,10.0.0.10'
+uci commit dhcp
+/etc/init.d/dnsmasq restart
 ```
 
 ---
 
-## Services on FOG Server
+## Helper Scripts
 
-| Service        | Port | Protocol | Purpose                          |
-|----------------|------|----------|----------------------------------|
-| Apache2        | 80   | HTTP/TCP | FOG web interface & iPXE scripts |
-| tftpd-hpa      | 69   | UDP      | Serves undionly.kpxe, ipxe.efi  |
-| dnsmasq        | 4011 | UDP      | Proxy DHCP for PXE               |
-| MySQL/MariaDB  | 3306 | TCP      | FOG database                     |
+### restart_router_dnsmasq.py
 
----
+Restarts dnsmasq on an OpenWrt router via ubus RPC. Credentials are read from environment variables — never hardcoded.
 
-## TFTP Files
-
-| File            | Size     | Purpose                                    |
-|-----------------|----------|--------------------------------------------|
-| undionly.kpxe   | ~363 KB  | iPXE chainloader for BIOS/legacy PXE      |
-| ipxe.efi        | ~1.07 MB | iPXE chainloader for UEFI PXE             |
-| fog.ipxe        | —        | iPXE script → chains to FOG boot.php      |
-| default.ipxe    | —        | Fallback → chains to fog.ipxe via TFTP    |
+```bash
+ROUTER_IP=10.0.0.1 ROUTER_PASSWORD=yourpassword python3 docs/restart_router_dnsmasq.py
+```
 
 ---
 
-## VirtualBox VMs
+## Services Reference
 
-| VM Name | OS           | NIC Type   | Boot Order         | Purpose              |
-|---------|--------------|------------|--------------------|----------------------|
-| linux   | Linux 64-bit | 82545EM    | Net → Floppy → DVD → Disk | PXE test / imaging |
-| win10   | Windows 10   | Am79C973   | DVD → Disk         | Image capture target |
-
-**Bridged interface:** `eno1` (FOG server's LAN NIC)
+| Service       | Port | Protocol | Purpose                            |
+|---------------|------|----------|------------------------------------|
+| Apache2       | 80   | HTTP/TCP  | FOG web UI & iPXE boot scripts     |
+| tftpd-hpa     | 69   | UDP       | Serves undionly.kpxe, ipxe.efi    |
+| dnsmasq       | 4011 | UDP       | Proxy DHCP for PXE                 |
+| MySQL/MariaDB | 3306 | TCP       | FOG database                       |
 
 ---
 
 ## Troubleshooting
 
-### "Nothing to boot: No such file or directory"
-- **Cause:** VirtualBox built-in iPXE received next-server pointing to a host with no TFTP
-- **Fix:** Ensure router's DHCP sends `next-server=192.168.1.132` and FOG dnsmasq is in proxy mode
+**"Nothing to boot: No such file or directory"**
+TFTP not reachable. Verify router DHCP `next-server` points to your FOG server IP and tftpd-hpa is running.
 
-### dnsmasq stops responding after config change
-- **Cause:** Added full DHCP options (dhcp-range with IPs, dhcp-option, dhcp-authoritative) to proxy config
-- **Fix:** Remove lines 11–14 from fog-proxydhcp.conf — proxy mode must not have these
+**dnsmasq stops responding after config change**
+You likely added full DHCP options to the proxy config. Remove any `dhcp-range` with IPs, `dhcp-option`, or `dhcp-authoritative` lines — these conflict with the router.
 
-### iPXE file not found via TFTP (uppercase filenames)
-- **Cause:** ISO 9660 converting filenames to uppercase
-- **Fix:** Use `-J -R` flags with genisoimage for Joliet + Rock Ridge extensions
-
-### VirtualBox ROM injection breaking NIC
-- **Cause:** Wrong VBoxInternal path for ROM injection
-- **Fix:** Remove with `VBoxManage setextradata <VM> VBoxInternal/...` (set to empty)
+**iPXE file not found (uppercase filenames)**
+If building a custom ISO, use `-J -R` flags with genisoimage for Joliet + Rock Ridge extensions to preserve case.
 
 ---
 
-## Management Commands
+## Useful Commands
 
 ```bash
 # Restart FOG dnsmasq
 sudo systemctl restart dnsmasq
 
-# Check dnsmasq status
-sudo systemctl status dnsmasq
-
 # Restart TFTP
 sudo systemctl restart tftpd-hpa
 
+# Watch PXE traffic live
+sudo tcpdump -i YOUR_LAN_INTERFACE -n 'port 67 or port 68 or port 4011'
+
 # Check FOG services
 sudo systemctl status FOGImageReplicator FOGMulticastManager FOGScheduler FOGSnapinReplicator
-
-# View DHCP/PXE traffic (requires sudo)
-sudo tcpdump -i eno1 -n 'port 67 or port 68 or port 4011'
-
-# Restart router dnsmasq (via ubus RPC)
-python3 /home/gls/Downloads/fog-pxe-backup/docs/restart_router_dnsmasq.py
 ```
 
 ---
 
-## Quick Restore
+## License
 
-If config is lost, restore from this backup:
+MIT — free to use and adapt.
 
-```bash
-sudo cp ~/Downloads/fog-pxe-backup/configs/fog-proxydhcp.conf /etc/dnsmasq.d/
-sudo cp ~/Downloads/fog-pxe-backup/tftpboot/fog.ipxe /tftpboot/
-sudo cp ~/Downloads/fog-pxe-backup/tftpboot/default.ipxe /tftpboot/
-sudo systemctl restart dnsmasq
-```
+---
+
+*Documented by [GLS Tech Limited](https://glstech.co.uk) — IT support, imaging, and open source consultancy in County Durham, UK.*
